@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - Matcha Cloud</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --espresso: #4F6F52;
+    --espresso-dark: #3A5A40;
+    --caramel: #7A9D54;
+    --cream: #F7F8F2;
+    --milk: #FCFDF8;
+    --text-main: #243124;
+    --red: #C0392B;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background-color: var(--cream);
+    background-image: radial-gradient(circle at 2px 2px, #dee2d6 1px, transparent 0);
+    background-size: 40px 40px;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-main);
+  }
+
+  .login-card {
+    background: var(--milk);
+    width: 100%;
+    max-width: 400px;
+    padding: 40px;
+    border-radius: 24px;
+    box-shadow: 0 15px 35px rgba(58, 90, 64, 0.15);
+    text-align: center;
+    border: 1px solid rgba(122, 157, 84, 0.2);
+  }
+
+  .logo-section {
+    margin-bottom: 30px;
+  }
+
+  .logo-icon {
+    font-size: 50px;
+    margin-bottom: 10px;
+    display: inline-block;
+  }
+
+  .logo-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    color: var(--espresso);
+  }
+
+  .logo-text span {
+    color: var(--caramel);
+  }
+
+  h2 {
+    font-size: 16px;
+    font-weight: 500;
+    color: #666;
+    margin-bottom: 30px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .form-group {
+    text-align: left;
+    margin-bottom: 20px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--espresso);
+  }
+
+  .form-group input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #DCE5D3;
+    border-radius: 12px;
+    background: var(--cream);
+    font-family: inherit;
+    font-size: 15px;
+    transition: all 0.3s;
+    outline: none;
+  }
+
+  .form-group input:focus {
+    border-color: var(--caramel);
+    box-shadow: 0 0 0 4px rgba(122, 157, 84, 0.1);
+  }
+
+  .btn-login {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--espresso), var(--caramel));
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    margin-top: 10px;
+  }
+
+  .btn-login:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(79, 111, 82, 0.3);
+  }
+
+  .btn-login:active {
+    transform: translateY(0);
+  }
+
+  .error-msg {
+    background: #FDECEA;
+    color: var(--red);
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    margin-bottom: 20px;
+    display: none; /* Muncul jika ada pesan error */
+  }
+
+  .footer-note {
+    margin-top: 30px;
+    font-size: 12px;
+    color: #9AA68D;
+  }
+</style>
+</head>
+<body>
+
+<div class="login-card">
+  <div class="logo-section">
+    <div class="logo-icon">🍵</div>
+    <div class="logo-text">Matcha<span>Cloud</span></div>
+  </div>
+
+  <h2>Sistem Kasir Cafe</h2>
+
+  <!-- Menampilkan pesan error dari Flask jika ada -->
+  {% if error %}
+  <div class="error-msg" style="display: block;">
+    ⚠️ {{ error }}
+  </div>
+  {% endif %}
+
+  <form action="/login" method="POST">
+    <div class="form-group">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" placeholder="Masukkan username" required autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" placeholder="Masukkan password" required>
+    </div>
+
+    <button type="submit" class="btn-login">Masuk ke Sistem</button>
+  </form>
+
+  <div class="footer-note">
+    &copy; 2026 Matcha Cloud POS System. <br>
+    Lupa password? Hubungi Admin.
+  </div>
+</div>
+
+</body>
+</html>
