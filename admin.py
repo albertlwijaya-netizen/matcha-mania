@@ -12,18 +12,17 @@ def get_stats():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     try:
-        # Hitung Omset dan Total Transaksi
-        cursor.execute("SELECT SUM(total) as omset, COUNT(*) as transaksi FROM transaksi")
+        # Gunakan IFNULL agar jika data kosong hasilnya 0 (bukan None)
+        cursor.execute("SELECT IFNULL(SUM(total), 0) as omset, COUNT(*) as transaksi FROM transaksi")
         stats = cursor.fetchone()
         
-        # Hitung Total Produk
         cursor.execute("SELECT COUNT(*) as total_produk FROM produk")
         produk = cursor.fetchone()
         
         return jsonify({
-            "omset": stats['omset'] or 0,
-            "transaksi": stats['transaksi'] or 0,
-            "total_produk": produk['total_produk'] or 0
+            "omset": stats['omset'],
+            "transaksi": stats['transaksi'],
+            "total_produk": produk['total_produk']
         })
     finally:
         cursor.close()
@@ -33,13 +32,11 @@ def get_stats():
 # MANAJEMEN USER (KASIR)
 # =========================
 
-# Ambil daftar semua kasir
 @admin_bp.route("/api/users", methods=["GET"])
 def get_users():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     try:
-        # Menampilkan semua user kecuali admin yang sedang login
         cursor.execute("SELECT id, username, role, is_active FROM users WHERE username != %s", (session.get('username'),))
         users = cursor.fetchall()
         return jsonify(users)
@@ -47,7 +44,6 @@ def get_users():
         cursor.close()
         db.close()
 
-# Tambah Kasir Baru
 @admin_bp.route("/api/users", methods=["POST"])
 def tambah_user():
     data = request.json
@@ -70,7 +66,6 @@ def tambah_user():
         cursor.close()
         db.close()
 
-# Toggle status kasir (Aktif/Non-aktif)
 @admin_bp.route("/api/users/toggle/<int:user_id>", methods=["POST"])
 def toggle_user(user_id):
     db = get_db_connection()
@@ -78,13 +73,12 @@ def toggle_user(user_id):
     try:
         cursor.execute("SELECT is_active FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
-        if not user:
-            return jsonify({"error": "User tidak ditemukan"}), 404
+        if not user: return jsonify({"error": "User tidak ditemukan"}), 404
             
         new_status = not user['is_active']
         cursor.execute("UPDATE users SET is_active = %s WHERE id = %s", (new_status, user_id))
         db.commit()
-        return jsonify({"message": "Status berhasil diperbarui", "new_status": new_status})
+        return jsonify({"message": "Status diperbarui", "new_status": new_status})
     finally:
         cursor.close()
         db.close()
@@ -93,15 +87,15 @@ def toggle_user(user_id):
 # MANAJEMEN PRODUK (MENU)
 # =========================
 
-# Tambah Produk Baru
 @admin_bp.route("/produk", methods=["POST"])
 def tambah_produk():
     data = request.json
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     try:
-        sql = "INSERT INTO produk (cat, nama, harga, gambar, badge) VALUES (%s, %s, %s, %s, %s)"
-        val = (data['cat'], data['nama'], data['harga'], data['gambar'], data.get('badge', ''))
+        # Perbaikan: %s harus berjumlah 6 sesuai kolom
+        sql = "INSERT INTO produk (cat, nama, harga, gambar, badge, stok) VALUES (%s, %s, %s, %s, %s, %s)"
+        val = (data['cat'], data['nama'], data['harga'], data['gambar'], data.get('badge', ''), data.get('stok', 0))
         cursor.execute(sql, val)
         db.commit()
         return jsonify({"message": "Produk berhasil ditambah"})
@@ -109,28 +103,25 @@ def tambah_produk():
         cursor.close()
         db.close()
 
-# Edit Produk (Mendukung Modal UI Baru)
 @admin_bp.route("/produk/<int:id>", methods=["PUT"])
 def edit_produk(id):
     data = request.json
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
     try:
-        # Query Update Lengkap agar Kategori dan Gambar juga bisa diubah
         sql = """
             UPDATE produk 
-            SET nama=%s, harga=%s, cat=%s, gambar=%s 
+            SET nama=%s, harga=%s, cat=%s, gambar=%s, stok=%s
             WHERE id=%s
         """
-        val = (data['nama'], data['harga'], data['cat'], data['gambar'], id)
+        val = (data['nama'], data['harga'], data['cat'], data['gambar'], data.get('stok', 0), id)
         cursor.execute(sql, val)
         db.commit()
-        return jsonify({"message": "Produk berhasil diperbarui"})
+        return jsonify({"message": "Produk diperbarui"})
     finally:
         cursor.close()
         db.close()
 
-# Hapus Produk
 @admin_bp.route("/produk/<int:id>", methods=["DELETE"])
 def hapus_produk(id):
     db = get_db_connection()
@@ -138,7 +129,65 @@ def hapus_produk(id):
     try:
         cursor.execute("DELETE FROM produk WHERE id=%s", (id,))
         db.commit()
-        return jsonify({"message": "Produk berhasil dihapus"})
+        return jsonify({"message": "Produk dihapus"})
+    finally:
+        cursor.close()
+        db.close()
+
+# =========================
+# LAPORAN PENJUALAN
+# =========================
+
+@admin_bp.route("/api/laporan/ringkasan")
+def laporan_ringkasan():
+    start_date = request.args.get('start')
+    end_date = request.args.get('end')
+    
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    try:
+        # 1. RINGKASAN TOTAL (Tanpa Group By - Aman)
+        cursor.execute("""
+            SELECT IFNULL(SUM(total), 0) as total_duit, 
+                   COUNT(*) as total_nota 
+            FROM transaksi 
+            WHERE DATE(created_at) BETWEEN %s AND %s
+        """, (start_date, end_date))
+        summary = cursor.fetchone()
+
+        # 2. DATA GRAFIK (Grouping diperbaiki menggunakan alias yang sama)
+        cursor.execute("""
+            SELECT DATE(created_at) as tanggal, 
+                   IFNULL(SUM(total), 0) as omset_harian
+            FROM transaksi 
+            WHERE DATE(created_at) BETWEEN %s AND %s
+            GROUP BY tanggal
+            ORDER BY tanggal ASC
+        """, (start_date, end_date))
+        data_grafik = cursor.fetchall()
+
+        # 3. PERFORMA KASIR
+        cursor.execute("""
+            SELECT kasir, 
+                   IFNULL(SUM(total), 0) as total_omset, 
+                   COUNT(*) as jml_transaksi
+            FROM transaksi 
+            WHERE DATE(created_at) BETWEEN %s AND %s
+            GROUP BY kasir
+            ORDER BY total_omset DESC
+        """, (start_date, end_date))
+        data_kasir = cursor.fetchall()
+
+        # Proses data agar JSON aman dikirim (konversi decimal ke float)
+        return jsonify({
+            "total_omzet": float(summary['total_duit']),
+            "total_transaksi": int(summary['total_nota']),
+            "grafik": data_grafik,
+            "kasir": data_kasir
+        })
+    except Exception as e:
+        print(f"Error Laporan: {e}")
+        return jsonify({"error": str(e)}), 500
     finally:
         cursor.close()
         db.close()

@@ -1151,29 +1151,58 @@ function catgambar(cat) {
 }
 
 function menuCard(m) {
+  // 1. Cek apakah stok habis
+  const isHabis = m.stok <= 0;
+  
   // Secara default tombol admin kosong
   let adminControls = '';
 
   // Jika yang login adalah admin, baru buatkan tombolnya
   if (USER_ROLE === 'admin') {
     adminControls = `
-      <button onclick="editProduk(${m.id})" title="Edit Menu">✏️</button>
-      <button onclick="hapusProduk(${m.id})" title="Hapus Menu">🗑️</button>
+      <button onclick="editProduk(${m.id})" title="Edit Menu" style="background:none; border:none; cursor:pointer;">✏️</button>
+      <button onclick="hapusProduk(${m.id})" title="Hapus Menu" style="background:none; border:none; cursor:pointer;">🗑️</button>
     `;
   }
 
   return `
-    <div class="menu-card">
-      <div class="menu-card-img">
+    <div class="menu-card" style="${isHabis ? 'opacity: 0.7;' : ''}">
+      <div class="menu-card-img" style="${isHabis ? 'filter: grayscale(1);' : ''}">
         <img src="/static/images/${m.gambar}" style="width:100%; height:100%; object-fit:cover;">
       </div>
       <div class="menu-card-info">
         <div class="menu-card-name">${m.name}</div>
-        <div class="menu-card-price">${fmt(m.price)}</div>
+        
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="menu-card-price">${fmt(m.price)}</div>
+          <!-- 2. Menampilkan info stok -->
+          <div style="font-size: 11px; font-weight: 600; color: ${isHabis ? 'var(--red)' : 'var(--espresso)'};">
+            Stok: ${m.stok}
+          </div>
+        </div>
 
-        <div style="margin-top:8px; display:flex; gap:6px;">
-          <button onclick="addToCart(${m.id})" style="background: var(--espresso); color: white; border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer;">🛒 Tambah</button>
-          ${adminControls} <!-- Tombol ini hanya terisi jika admin -->
+        <div style="margin-top:8px; display:flex; gap:6px; align-items:center;">
+          <!-- 3. Mematikan tombol jika stok habis -->
+          <button 
+            onclick="${isHabis ? '' : `addToCart(${m.id})`}" 
+            ${isHabis ? 'disabled' : ''}
+            style="
+              background: ${isHabis ? '#ccc' : 'var(--espresso)'}; 
+              color: white; 
+              border: none; 
+              padding: 5px 8px; 
+              border-radius: 4px; 
+              cursor: ${isHabis ? 'not-allowed' : 'pointer'};
+              flex: 1;
+              font-size: 12px;
+            "
+          >
+            ${isHabis ? '🚫 Habis' : '🛒 Tambah'}
+          </button>
+          
+          <div style="display:flex; gap:4px;">
+            ${adminControls}
+          </div>
         </div>
       </div>
     </div>
@@ -1335,52 +1364,77 @@ function setPayMethod(m) {
 
 function doCheckout() {
   const subtotal = cart.reduce((s,c)=>s+c.price*c.qty, 0);
-  const disc = Math.max(0, Math.min(100, parseFloat(document.getElementById('discountInput').value)||0));
+  const disc = parseFloat(document.getElementById('discountInput').value)||0;
   const discAmt = Math.round(subtotal * disc / 100);
   const tax = Math.round((subtotal - discAmt) * 0.10);
   const grand = subtotal - discAmt + tax;
-  const paid = payMethod==='Tunai' ? parseFloat(document.getElementById('cashInput').value)||0 : grand;
+  const paid = payMethod === 'Tunai' ? parseFloat(document.getElementById('cashInput').value) : grand;
   const change = paid - grand;
   const table = document.getElementById('tableInput').value || 'Umum';
-  const time = new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit'});
 
-  // build receipt
-  let rows = cart.map(c=>`
-    <div class="receipt-row"><span>${c.name} x${c.qty}</span><span>${fmt(c.price*c.qty)}</span></div>
-  `).join('');
-  if(disc>0) rows += `<div class="receipt-row"><span>Diskon ${disc}%</span><span>− ${fmt(discAmt)}</span></div>`;
-  rows += `<div class="receipt-row"><span>PPN 10%</span><span>${fmt(tax)}</span></div>`;
-  rows += `<div class="receipt-row total"><span>Total</span><span>${fmt(grand)}</span></div>`;
-  rows += `<div class="receipt-row"><span>Bayar (${payMethod})</span><span>${fmt(paid)}</span></div>`;
-  if(payMethod==='Tunai') rows += `<div class="receipt-row change"><span>Kembalian</span><span>${fmt(change)}</span></div>`;
-
-  document.getElementById('modalReceipt').innerHTML = rows;
-document.getElementById('modalSub').textContent = `${table} • ${orderType} • ${time}`;
-
-fetch('/checkout', {  method: "POST",
-  headers: {
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    pelanggan: table,
-    tipe_order: orderType,
-    metode_bayar: payMethod,
-    subtotal: subtotal,
-    diskon: discAmt,
-    pajak: tax,
-    total: grand,
-    bayar: paid,
-    kembalian: change,
-    pesanan: cart.map(c => `${c.name} x${c.qty}`).join(', '),
-    kasir: USERNAME // Tambahkan ini agar tercatat siapa kasirnya
+  fetch('/checkout', {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      pelanggan: table,
+      tipe_order: orderType,
+      metode_bayar: payMethod,
+      subtotal: subtotal,
+      diskon: discAmt,
+      pajak: tax,
+      total: grand,
+      bayar: paid,
+      kembalian: change,
+      pesanan: cart.map(c => `${c.name} x${c.qty}`).join(', '),
+      cart_items: cart.map(c => ({ id: c.id, qty: c.qty })), // Kirim data potong stok
+      kasir: USERNAME 
+    })
   })
-})
-.then(res => res.json())
-.then(data => {
-   console.log("Transaksi tersimpan");
-});
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      // Jika stok tiba-tiba habis (dicek oleh server)
+      alert("Gagal transaksi: " + data.error);
+    } else {
+      // 1. Tampilkan modal sukses
+      document.getElementById('checkoutModal').classList.add('show');
+      
+      // 2. UPDATE STOK DI TAMPILAN SECARA LANGSUNG
+      refreshMenuData(); 
 
-document.getElementById('checkoutModal').classList.add('show');
+      // 3. Bersihkan Keranjang & Input (agar transaksi baru bersih)
+      cart = [];
+      document.getElementById('tableInput').value = '';
+      document.getElementById('cashInput').value = '';
+      renderCart(); // Render ulang keranjang jadi kosong
+      console.log("Transaksi Berhasil & Stok Terupdate");
+    }
+  })
+  .catch(err => {
+    alert("Terjadi kesalahan koneksi ke server");
+  });
+}
+
+function refreshMenuData() {
+    fetch('/produk')
+    .then(res => res.json())
+    .then(data => {
+        // Timpa variabel MENU lama dengan data terbaru (termasuk stok terbaru)
+        MENU = data.map(item => ({
+            id: item.id,
+            cat: item.cat,
+            name: item.nama,
+            price: item.harga,
+            gambar: item.gambar,
+            stok: item.stok // Stok terbaru dari TiDB
+        }));
+
+        // Render ulang tampilan menu di layar
+        renderMenu(); 
+        console.log("Tampilan menu diperbarui dengan stok terbaru");
+    });
 }
 
 function closeModal() {
@@ -1446,22 +1500,29 @@ renderCart();
 renderTotals();
 setPayMethod('Tunai');
 
-fetch('/produk').then(res => res.json())
-.then(data => {
-    MENU = data.map(item => ({
-        id: item.id,
-        cat: item.cat,
-        name: item.nama,
-        price: item.harga,
-        gambar: item.gambar,
-        badge: item.badge
-    }));
+function ambilDataMenu() {
+    fetch('/produk')
+    .then(res => res.json())
+    .then(data => {
+        // Update variabel global MENU dengan data terbaru dari database
+        MENU = data.map(item => ({
+            id: item.id,
+            cat: item.cat,
+            name: item.nama,
+            price: item.harga,
+            gambar: item.gambar,
+            stok: item.stok // Data stok terbaru
+        }));
 
-    CATS = ['Semua', ...new Set(MENU.map(m => m.cat))];
+        // Render ulang tabs dan menu
+        renderCatTabs();
+        renderMenu(); 
+        console.log("Data menu diperbarui dari server");
+    });
+}
 
-    renderCatTabs();
-    renderMenu();
-});
+// Panggil pertama kali saat halaman dibuka
+ambilDataMenu();
 function addProdukPrompt() {
   const nama = prompt("Nama produk:");
   if (!nama) return;
